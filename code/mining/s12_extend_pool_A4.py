@@ -56,7 +56,7 @@ def main():
             auc, sd = cv_auc_kind(tx, lb, kind)
             results[f"{tag} {kind}"] = round(auc, 4)
             print(f"{tag:16s} {kind:5s} CV AUC = {auc:.4f} (+-{sd:.4f})", flush=True)
-    json.dump(results, open(os.path.join(HERE, "extend_pool_A4_auc.json"), "w"), indent=2)
+    json.dump(results, open(os.path.join(RESULTS, "extend_pool_A4_auc.json"), "w"), indent=2)
     print("saved -> extend_pool_A4_auc.json")
 
 

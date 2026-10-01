@@ -59,7 +59,7 @@ The release is split across two places:
 | Where | What |
 |---|---|
 | GitHub: `github.com/zboyr/lexical-fear` | `code/`, plus `data/results/`, the small final result files. These are enough for the no-GPU headline-number check below. |
-| Hugging Face dataset: [`vhboyr/lexical-fear`](https://huggingface.co/datasets/vhboyr/lexical-fear) | The **full** `data/` tree (about 1 GB), laid out exactly as `data/` in this repository: datasets, judge outputs, labels, prompt pools, prompts, per-run artifacts and results. |
+| Hugging Face dataset: [`vhboyr/lexical-fear`](https://huggingface.co/datasets/vhboyr/lexical-fear) | The **full** `data/` tree (about 9 GB), laid out exactly as `data/` in this repository: datasets, raw generations, judge outputs, labels, prompt pools, prompts, per-run artifacts (including the x85 hidden-state shards) and results. |
 
 To get the full data, run this from the repository root:
 
@@ -79,24 +79,42 @@ command as `hf download`.)
 code/                     [GitHub]  every stage script (flat, one file per stage)
   extract_features_v2.py            hidden-state feature-cache extraction (all models)
   x58_methods.py                    the refusal2 / comply2 judge prompts and validators
+  x61_classify_harmful_sixway.py    six-way prompt taxonomy, one OpenRouter judge per run
+  build_x61_majority_harmful_promptset.py   the dataset freeze (three-judge majority vote)
+  x63_gen_hpc.py                    10 sampled responses per harmful prompt, any model
+  x64_run.py                        refusal2 / comply2 judging of the x63 responses
+  x65_build_v4_v5_labels.py         per-model v4 / v5 label files from the x64 judgments
   x66_*.py                          label overlays + frozen split protocol
-  x71_*.py, x75_*.py                refusal-weighted probe and rank-one compiler ("path A")
+  x71_*.py, x75_*.py                refusal-weighted probe and rank-one compiler ("path A"),
+                                    plus x71_dose_kl.py (benign KL vs. rank-one scale)
   x80_*.py ... x89_*.py             one prefix per experiment (see Reproduction guide)
-  x80.sbatch x81.sbatch x83.sbatch x85.sbatch x86.sbatch   Slurm wrappers for GPU stages
+  x63_gen.sbatch x80.sbatch x81.sbatch x83.sbatch x85.sbatch x86.sbatch   Slurm wrappers for GPU stages
   lib/                              edit_common.py (model/config helpers),
-                                    edit_rank1.py (the rank-one edit mechanism)
-  mining/                           prompt-pool mining and delexicalization audits
-                                    (s1-s12, t12-t15)
+                                    edit_rank1.py (the rank-one edit mechanism),
+                                    q19_run_judges.py + q19_methods.py (OpenRouter client used by x64),
+                                    rubric_common.py (robust JSON-object extraction)
+  orbench/                          s2_cluster_local.py: the local GGUF judge used by the
+                                    upstream labelling chain (prompt, T math, JSON parsing)
+  mining/                           prompt-pool mining, delexicalization audits, and the
+                                    upstream labelling chain (s1-s12, t0-t5, t9, t12-t15,
+                                    rejudge_validated.py, train_probes.py,
+                                    generate_features.py, run_*.sh)
+  figures/                          the paper's plotting scripts (fig*.py) and TikZ sources (fig-*.tex)
   tests/                            unit tests (run_tests.py + test_*.py)
 data/
   results/                [GitHub + HF]  final aggregate result files (the paper's numbers)
-  datasets/               [HF]  the frozen harmful prompt set
+  datasets/               [HF]  the frozen harmful prompt set, and the older feasibility set
+                                the freeze builder cross-tabulates against
+  generations/            [HF]  raw 10-per-prompt responses behind the labels (x63, nine models)
+                                and the Llama-era x71/x75 edited-model responses
   judged/                 [HF]  raw judge outputs behind the Qwen labels
   labels/                 [HF]  per-model refusal/compliance label files
-  pools/                  [HF]  mined prompt pools and the benign source pool
+  pools/                  [HF]  raw candidate pool, filtering rounds, mined pools, the benign
+                                source pool, the labelling batches and the x61 judge outputs
   prompts/                [HF]  the generation payload for the frozen harmful set
   runs/                   [HF]  per-experiment artifacts (cohorts, manifests, generations,
-                                judgments, probes, adapters, directions, benchmark scores)
+                                hidden-state shards, judgments, probes, adapters, directions,
+                                benchmark scores)
   x61_mask_tbg.npy        [HF]  retention mask over the 30,000-row feature-cache order
 ```
 
@@ -112,13 +130,37 @@ There is no `data/scores/` directory. No experiment in this release writes one.
 - **`code/lib/`.** `edit_common.py` handles model loading, the
   multimodal-wrapper fallback, chat formatting and config loading.
   `edit_rank1.py` installs the trainable rank-one `down_proj` edit used by
-  path A.
-- **`code/mining/`.** Builds and audits the confusable prompt pools.
+  path A. `q19_run_judges.py` supplies the OpenRouter client (`call`,
+  `CostMeter`, `load_api_key`) that `x64_run.py` imports; it imports
+  `q19_methods.py` at load time. Their own command-line judge-comparison
+  study belongs to the parent project and its inputs are not released.
+  `rubric_common.py` supplies `extract_json_object`.
+- **`code/orbench/`.** `s2_cluster_local.py`, the local GGUF judge of the
+  upstream labelling chain: the three-cluster judge prompt, the
+  `safety_score` / `safety_entropy` / `T` math, JSON parsing and
+  `find_gguf`. It lives here because `mining/t2_cluster.py`,
+  `mining/rejudge_validated.py`, `mining/s8_llm_intent_judge.py` and
+  `lib/rubric_common.py` import it from `code/orbench/`.
+- **`code/mining/`.** Builds, audits and labels the confusable prompt pools.
   `s1` downloads the public source corpora into `pool.parquet`. `s2`/`s3`
   run the TF-IDF source-AUC screens. `s4`-`s6` do AFLite-style adversarial
   filtering. `s7`-`s9` are validity checks. `s10`-`s12` extend the pool to
-  10k/15k/20k per side. `t12`-`t15` stage pools for the external labelling
-  step (see [What is not included](#what-is-not-included-and-how-to-regenerate-it)).
+  10k/15k/20k per side. The `t*` scripts, `rejudge_validated.py` and the
+  `run_*.sh` drivers are the upstream labelling chain that turns the mined
+  pools into `cp_15k_clustered_v2.json` (see
+  [Upstream labelling chain](#upstream-labelling-chain-cp_-pools)).
+  `t3`, `t4`, `t5`, `train_probes.py` and `generate_features.py` are the
+  Llama-3.2-3B pilot probe evaluation behind `data/results/confusable_A_auc.json`.
+  These upstream scripts come from an earlier project. In this release their
+  path constants and usage notes changed (they now read and write
+  `data/pools/` and `data/results/`), plus the `sys.path` lines where a
+  module moved; the logic is unchanged. The `run_*.sh` drivers were
+  rewritten for this layout, and `run_a3_all.sh` now stops after the 15k
+  merge (its original Llama probe steps produced files that are not part
+  of the paper).
+- **`code/figures/`.** The paper's plotting scripts and TikZ sources (see
+  [Figures](#figures)). They write to `figures/` at the repository root by
+  default (git-ignored); `--out-dir` changes that.
 - **`code/tests/`.** 51 unit tests in eight files, run by `run_tests.py`.
 - **`*.sbatch`.** Thin Slurm wrappers that dispatch on an environment
   variable `STAGE`. See [Notes on the Slurm files](#notes-on-the-slurm-sbatch-files).
@@ -128,19 +170,29 @@ There is no `data/scores/` directory. No experiment in this release writes one.
 | Path | Contents |
 |---|---|
 | `data/datasets/swse_x61_majority_harmful_v1/` | The frozen harmful prompt set. `prompts.jsonl` holds the 13,527 retained harmful prompts. `excluded.jsonl` holds the 1,473 dropped prompts with each judge's code and the exclusion reason. `manifest.json` gives counts and the retention rule (three-judge majority vote). Each record carries `source_id`, the prompt id, and `source_row`, its row in the 15,000-row harmful source pool. `data/datasets/CURRENT.json` is a pointer left over from the parent project. It names a different, older dataset, and nothing in `code/` reads it. |
+| `data/datasets/swse_feasibility_clean_b075_v1/` | An older, partly human-reviewed feasibility set. The freeze builder reads only its `feasibility_decisions.jsonl`, to cross-tabulate the new rule against it (`old_feasibility_crosstab` in the frozen manifest). |
 | `data/prompts/x63_prompts13527.json` | The generation payload: `[{id, prompt}]` for the 13,527 frozen harmful prompts. |
+| `data/generations/x63_<tag>_<start>_<end>.json` | The raw responses behind every label file: 10 sampled responses per frozen harmful prompt for each of the nine models, in 12 row shards per model (`id`, `prompt`, `model`, `llm_responses`, `gen_tokens`, `truncated`). Written by `x63_gen_hpc.py`, read by `x64_run.py`. |
+| `data/generations/x71_responses_*.json`, `x75_*.json` | Llama-3.2-3B edited-model responses from the Llama-era x71/x75 experiment (method provenance only). |
+| `data/pools/cp_15k_clustered_v2.json` | The 15,000-row harmful source pool with its upstream `llm_clustering` labels (Llama-3.2-3B responses judged by the local GGUF judge, re-judged where invalid). Every feature cache and the 30,000-row order are built from it. |
 | `data/pools/cp_15k_benign.json` | The 15,000-row benign source pool (`source == "hard"`). The first 10,500 rows of a fixed seed-42 permutation make up the benign side of the frozen set. |
+| `data/pools/qwen_clustered_v2.json` | The same 15,000 harmful prompts (identical `id`, `prompt`, `source`, `subtype`) with an earlier Qwen3.5-4B labelling run attached. The x61 classifier and the freeze builder read only the prompt fields; the builder checks the file's sha256. The Qwen responses and labels in it are not used by any released script. |
+| `data/pools/x61_sixway_{gpt56_luna_max,deepseek_v4_0731_max,glm_5_2_low}.jsonl` | The three x61 six-way judge outputs (one code per prompt) behind the dataset freeze. |
+| `data/pools/pool.parquet` | The raw mined candidate pool written by `mining/s1` (about 100 MB). |
+| `data/pools/round_{A,B}_rand_{1..4}.parquet` | The per-round pools of the two `s6` filtering variants (`A_rand` feeds the frozen pools; `B_rand` is the multi-source variant). |
 | `data/pools/mined_pool_{A_rand,A2_rand,A3_bnd,A4_bnd}.json` | The mined 5k+5k confusable pools from the delexicalization audit. A+A2+A3 is the frozen 15k scale-out; A4 is the rejected 20k extension. |
+| `data/pools/cp_{prompts,responses,clustered}.json`, `cp_{rest,a2,a3}_{prompts,responses,clustered}.json` | The four labelling batches of the upstream chain (pilot, rest of pool A, A2, A3): prompts, 10 Llama-3.2-3B responses per harmful prompt, and the judge's clustering. Merged by `mining/t15` into `cp_15k_clustered.json`, which `rejudge_validated.py` turns into `cp_15k_clustered_v2.json`. |
 | `data/judged/x64_{refusal2,comply2}_qwen_s42.jsonl` | Per-prompt judge outputs over the ten Qwen3.5-4B responses per prompt (one boolean per response). |
 | `data/labels/{tag}_labels_{v4,v5}.json` | Frozen per-model label files for the nine campaign models (`qwen`, `qwen08b`, `qwen2b`, `qwen9b`, `qwen27b`, `llama`, `gemma`, `phi`, `smollm3`). v4 stores `refusal`, `refusal_rate`, `refusal_entropy`, `complied` and `T`. v5 stores the three-class rebuild. See [Terms](#terms-used-in-this-readme-and-in-the-code). |
 | `data/x61_mask_tbg.npy` | Boolean mask over the 30,000-row cache order (15,000 harmful followed by 15,000 benign). `False` on the 1,473 non-retained harmful rows. |
 | `data/runs/x66/` | Frozen split index files `{tag}_seed{42,123,7}_{train,test}_indices.json` (rows of the 30,000-row cache order) for every model tag. The paper uses seed 42 only. |
+| `data/runs/x71/`, `data/runs/x75/` | The Llama-era path-A experiment: config, prepared splits, probes, adapters, dose-KL curves, scores, capability checks and the run ledger. Method provenance only; the paper reports the Qwen-native port in `data/runs/x87/`. |
 | `data/runs/x80/` | Paired refusal/compliance probe artifacts. This experiment is a negative precursor (see below). |
 | `data/runs/x81/` | Lexicon, fill distributions, semantic judgments, frozen arms, generations and refusal judgments for the word-removal and ignore-instruction experiments. |
 | `data/runs/x83/` | Frozen keyword-insertion cohort, detection gate, generations and refusal judgments for arms O/S/M/E. |
-| `data/runs/x85/` | Frozen crossed prompt-by-word cohort, plus generations and refusal judgments for arms O/H/N. The hidden-state shards are **not** included. |
-| `data/runs/x86/` | Intervention manifest, fold directions, KL calibration, and refusal2/comply2 judgments for all conditions. The generations are **not** included. |
-| `data/runs/x87/` | External-benchmark manifest, the Qwen-native path-A port (probes, weight audit, rank-one adapter, config, dose-KL curve), and per-condition generations plus OR-Bench, StrongREJECT, IFEval and GSM8K outputs. |
+| `data/runs/x85/` | Frozen crossed prompt-by-word cohort, generations and refusal judgments for arms O/H/N, and the hidden-state shards `features/x85_hidden_shard_{000..023}-of-024.pt` (4,704 cells × 4 positions × 33 states, fp16, 3.0 GB). |
+| `data/runs/x86/` | Intervention manifest, fold directions, KL calibration, the 19 per-condition generation files, and refusal2/comply2 judgments for all conditions. |
+| `data/runs/x87/` | External-benchmark manifest, the Qwen-native path-A port (probes, weight audit, rank-one adapter, config, dose-KL curve), and per-condition generations plus OR-Bench, StrongREJECT, IFEval and GSM8K outputs. The prepared tensors of the port (`x75_qwen_prepared/`) are not included. |
 | `data/runs/x88/` | Eight-model transfer: manifest, and per-model directions, adapters, configs, generations and benchmark outputs (`data/runs/x88/<tag>/`). |
 | `data/runs/x89/` | Positive-dose extension: per-condition generations and benchmark outputs. |
 | `data/results/` | Final aggregate result files (one or more per experiment), listed in the [claims table](#paper-claims-figures-and-tables-result-files-and-scripts). |
@@ -286,14 +338,51 @@ What to expect when diffing against the released files:
   verdicts against 0.02 (the value now in `code/x87_common.py`) but do not
   write that block.
 
-These analyses **cannot** be re-run from released data alone:
+With the full Hugging Face data, these CPU steps also re-run from released
+files. All of them were checked against the released artifacts:
 
-| Script | Why |
-|---|---|
-| `x85_analyze.py`, `x85_aggregate_levels.py` | Need the x85 hidden-state shards (regenerable on GPU, below). |
-| `x86_analyze.py` | Needs the x86 generations, which it hash-checks against the judgments (regenerable on GPU). |
-| `mining/s2_auc.py`, `s3_combined_pool.py`, `s4`-`s6` | Need `data/pools/pool.parquet` (regenerable with `s1`). |
-| `mining/s10`-`s12` | Need the per-round filtering parquets (`round_A_rand_{2,3,4}.parquet`), which are not released. |
+```bash
+python code/x85_analyze.py          --out /tmp/lf_check/x85.json --directions-out /tmp/lf_check/x85_dirs.npz   # ~25 s, reads the 3 GB shards
+python code/x85_aggregate_levels.py --out /tmp/lf_check/x85_levels.json
+python code/x80_build_labels.py     --out /tmp/lf_check/x80_labels.npz        # == data/runs/x80/x80_labels.npz (np.array_equal)
+python code/x80_probe_geometry.py   --out /tmp/lf_check/x80_probe_geometry.json   # byte-identical to data/results/
+python code/build_x61_majority_harmful_promptset.py --out /tmp/lf_check/x61     # prompts.jsonl / excluded.jsonl byte-identical
+python code/figures/fig56.py --out-dir /tmp/lf_check/fig                         # asserts the recomputed rho matches the frozen 0.653
+```
+
+- `x85_analyze.py` and `x85_aggregate_levels.py` agree with the released
+  files to float32 round-off (largest relative difference about 1e-5;
+  every gate, estimate and interval matches).
+- The freeze builder's `manifest.json` differs only in `git_commit` and in
+  the recorded input paths; the input hashes match.
+- `x65_build_v4_v5_labels.py` and `mining/t0`/`t9`/`t12`/`t14`/`t15` have
+  no `--out` flag and write into `data/`, so run them in a copy of the
+  checkout. There they reproduce `data/labels/qwen_labels_{v4,v5}.json`,
+  the four `cp_*_prompts.json` batches, `cp_15k_benign.json`
+  (byte-identical) and the merged harmful pool (identical to
+  `cp_15k_clustered_v2.json` on every row the re-judge did not touch).
+- `mining/s2`-`s6` run from the released `pool.parquet`, and `s10`-`s12`
+  from the released round files. `s6` is **not** bit-reproducible across
+  library versions: in our re-run (scikit-learn 1.8, numpy 2.2, pandas 2.2
+  instead of the original 1.9 / 2.5 / 3.0) rounds 1-2 matched the released
+  `round_*_rand_{1,2}.parquet` exactly, round 3 held the same rows in a
+  different order, and from round 4 on the hardness cut and the final
+  random cut diverged (OOF AUC trajectory 0.98 / 0.94 / 0.72 / 0.57 against
+  the original 0.98 / 0.94 / 0.72 / 0.56). The released round files and
+  mined pools are the frozen record; downstream steps read those. From the
+  released round files, `s10`, `s11` and `s12` reproduce
+  `mined_pool_{A2_rand,A3_bnd,A4_bnd}.json` and
+  `extend_pool_A{2,3,4}_auc.json` byte-for-byte (about 10 minutes of CPU).
+
+`python code/x86_analyze.py --allow-code-drift --out /tmp/lf_check/x86_boundary_intervention.json`
+re-checks the full lineage (judgments → generations → manifest and KL
+calibration) and reproduces every number in
+`data/results/x86_boundary_intervention.json` exactly. The x85 analyzers
+reproduce their results to float32 round-off (relative differences up to
+about 1e-6, which come from the hardware, not the data).
+
+Analyses that still need GPU outputs which are not released are listed in
+[What is not included](#what-is-not-included-and-how-to-regenerate-it).
 
 ## Environment setup
 
@@ -321,8 +410,19 @@ lm_eval==0.4.12            # IFEval / GSM8K via lm-evaluation-harness (x87-x89);
 strong_reject              # StrongREJECT evaluator, pinned to upstream commit 7a551d5 for x87-x89
 peft                       # usually needed to load the LoRA StrongREJECT evaluator
 pytest                     # optional; tests fall back to a plain runner without it
-llama-cpp-python           # only for mining/s8_llm_intent_judge.py
+matplotlib                 # code/figures/ only
+llama-cpp-python           # only for the local GGUF judge: mining/t2_cluster.py,
+                           # mining/rejudge_validated.py, mining/s8_llm_intent_judge.py
 ```
+
+The local GGUF judge (`code/orbench/s2_cluster_local.find_gguf`) loads the
+first file matching
+`~/.cache/huggingface/hub/models--HauhauCS--*Uncensored*/snapshots/*/*.gguf`.
+The original runs used `Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf`
+from the Hugging Face repo `HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive`,
+loaded with all layers on the GPU, `n_ctx=8192`, seed 42. Download only that
+file: with several `.gguf` files in the snapshot the choice is arbitrary. The
+path is fixed to `~/.cache/huggingface/hub` and ignores `HF_HOME`.
 
 For example:
 
@@ -363,11 +463,13 @@ are the exact snapshots recorded in the frozen manifests.
 | `qwen2b` | `Qwen/Qwen3.5-2B` | `15852e8c16360a2fea060d615a32b45270f8a8fc` | x88 |
 | `qwen9b` | `Qwen/Qwen3.5-9B` | `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | x88 |
 | `qwen27b` | `Qwen/Qwen3.5-27B` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | x88 |
-| `llama` | `unsloth/Llama-3.2-3B-Instruct` | `006f5dcd1393c3add266de40994ba96225e9689d` | x88; `mining/s9` |
+| `llama` | `unsloth/Llama-3.2-3B-Instruct` | `006f5dcd1393c3add266de40994ba96225e9689d` | x88; `mining/s9`; the upstream labelling chain (`mining/t1`, `t3`, `t5`; loaded by name, revision not recorded) |
 | `gemma` | `google/gemma-4-e2b-it` | `3e22461f65e89153144f8adb70e3b8c2cc9845a7` | x88 |
 | `phi` | `microsoft/Phi-4-mini-instruct` | `cfbefacb99257ffa30c83adab238a50856ac3083` | x88 (native implementation; see `X63_TRUST_REMOTE_CODE`) |
 | (evaluator) | `qylu4156/strongreject-15k-v1` (LoRA on `google/gemma-2b`) | latest at download | StrongREJECT scoring, x87-x89 |
 | (embedding) | `BAAI/bge-base-en-v1.5` | latest | `mining/s7` |
+| (local judge) | `HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive`, Q4_K_M GGUF | latest | upstream labelling chain (`mining/t2`, `rejudge_validated.py`), `mining/s8` |
+| (x61 judges) | `openai/gpt-5.6-luna` (effort max), `deepseek/deepseek-v4-flash-0731` (max), `z-ai/glm-5.2` (low), via OpenRouter | n/a | `x61_classify_harmful_sixway.py` |
 
 `data/labels/` also holds `smollm3` labels from the parent campaign. No
 experiment in this release uses that model.
@@ -440,12 +542,13 @@ are recorded relative to the repository root.
 
 | Variable | Read by | Purpose |
 |---|---|---|
-| `OPENROUTER_API_KEY` (in a **`.env` file**, not the environment) | `x81_judge_refusal.py`, reused by `x83_judge_refusal.py`, `x85_judge_refusal.py`, `x86_judge.py` | The LLM judge. The key is read from a file named `.env` **at the repository root** (next to `code/`), from a line `OPENROUTER_API_KEY=<your key>`. Shell environment variables are ignored. Keep `.env` out of version control. |
+| `OPENROUTER_API_KEY` (in a **`.env` file**) | `x81_judge_refusal.py`, reused by `x83_judge_refusal.py`, `x85_judge_refusal.py`, `x86_judge.py`; also `x64_run.py` (through `lib/q19_run_judges.py`) and `x61_classify_harmful_sixway.py` | The LLM judge. The key is read from a file named `.env` **at the repository root** (next to `code/`), from a line `OPENROUTER_API_KEY=<your key>`. The x81-x86 judges ignore shell environment variables; `x64_run.py` and `x61_classify_harmful_sixway.py` fall back to the `OPENROUTER_API_KEY` environment variable when `.env` has no key. Keep `.env` out of version control. |
 | `SWSE_FC` | `x66_build_v4v5_overlays.py` | Root directory of the feature caches. `X66_FC` is an older alias. If unset, it falls back to `feature_caches/` at the repository root. Other scripts take cache paths as explicit arguments; the commands below write those paths as `$SWSE_FC/...` for consistency. |
 | `X66_DATA`, `X66_CLUSTERED` | `x66_build_v4v5_overlays.py` | Override the `data/` directory and the harmful clustered pool path (default `data/pools/cp_15k_clustered_v2.json`). |
 | `X63_TRUST_REMOTE_CODE` | `extract_features_v2.py`, `lib/edit_common.py` (set automatically by `x88_common.py`) | `0` forces the native `transformers` implementation instead of repository custom code. Needed for `microsoft/Phi-4-mini-instruct`, whose bundled `modeling_phi3.py` does not work with transformers 5.x. The default is `1`. |
 | `HF_HOME`, `HF_HUB_OFFLINE`, `HF_TOKEN` | Hugging Face libraries (`x75_preflight.py` also checks `HF_HUB_OFFLINE`) | Cache location, offline mode, and gated-model access. |
-| `STAGE`, `CONDITION`, `SEED`, `EXT`, `SHARD`, `NSHARDS` | the `.sbatch` wrappers only | Select which stage a Slurm job runs. |
+| `STAGE`, `CONDITION`, `SEED`, `EXT`, `SHARD`, `NSHARDS`, `MODEL_ID`, `TAG`, `START`, `END`, `BATCH`, `LIMIT` | the `.sbatch` wrappers only | Select which stage, shard or model a Slurm job runs. |
+| `PY` | `code/mining/run_*.sh` | Python interpreter (default `python`). |
 
 The judge targets `deepseek/deepseek-v4-flash-0731` through OpenRouter's
 chat-completions endpoint. Judge spend was small: about $0.10 per condition
@@ -459,23 +562,26 @@ are still missing or failed.
 
 | Missing artifact | Size | Needed by | How to regenerate |
 |---|---|---|---|
-| Feature caches `$SWSE_FC/{tag}_A15k_v2(style)_full` and the overlays `{tag}_A15k_{v4,v5}_full` | ~46 GB for nine models | path A: `x71_prepare_dataset.py` in the x87 and x88 stage 0, and `x80_fit_paired_probes.py` | `code/extract_features_v2.py`, then `code/x66_build_v4v5_overlays.py` ([commands](#stage-2-feature-caches-labels-overlays-and-the-frozen-split-x66)). Both read `data/pools/cp_15k_clustered_v2.json` (on Hugging Face). |
-| `data/pools/pool.parquet`, the raw mined candidate pool | 100 MB | `mining/s2`-`s6` | `python code/mining/s1_download_extract.py` (downloads the public source corpora). The source dataset revisions are not pinned, so the rebuilt pool may differ from the original. |
-| `data/pools/round_A_rand_{2,3,4}.parquet` and other per-round filtering outputs | n/a | `mining/s10`-`s12` | Written by `mining/s6_iterative_random_final.py` from `pool.parquet`. An exact match is not guaranteed if `pool.parquet` differs. |
-| Clustered staging batches (`cp_clustered.json`, `cp_rest_clustered.json`, `cp_a2_clustered.json`, `cp_a3_clustered.json`) | n/a | `mining/t13`, `t15` | Not included. They came from the same external labelling step. |
-| `data/generations/`, the raw 10-per-prompt response sets behind the labels | 3.1 GB | none of the released scripts; the labels are released | Not included. Generating them needs the sampling contract above and the generation script from the parent project, which is not part of this release. |
-| `data/runs/x85/features/x85_hidden_shard_{000..023}-of-024.pt`, residual states for 4,704 cells × 4 positions × 33 states, fp16 | 3.0 GB | `x85_analyze.py`, `x85_aggregate_levels.py`, `x86_build_manifest.py`, and the paper's projection figure | `x85_extract_hidden.py --shard i --num-shards 24` for i = 0..23 ([x85](#x85-crossed-prompt-by-word-decomposition)) |
-| `data/runs/x86/x86_generations_<condition>.json`, 19 files | ~140 MB | `x86_analyze.py` | `x86_generate.py --condition <c>` from the released manifest, KL calibration and directions ([x86](#x86-held-out-boundary-intervention)) |
-| `data/runs/x87/x75_qwen_prepared/` (`probe_dataset.pt`, `prompt_splits.json`) and the per-model prepared tensors for x88 | 2.2 GB for Qwen | re-running path-A stage 0 | `x71_prepare_dataset.py` (needs a feature cache) |
-| Full lm-eval GSM8K logs | n/a | nothing | The released `x87_gsm8k_*.json` files keep per-question scores but omit the `doc`/`arguments` fields. |
-| x75 Llama-era artifacts (`data/runs/x71/`, `data/runs/x75/`) | n/a | `x75_freeze_config.py`, `x75_preflight.py`, `x75_dose_kl.py`, `x75_analyze.py`, `x71_analyze.py` | Not included. These scripts document the Llama experiment that produced the path-A method; the paper reports only its Qwen-native port, which is fully reproducible ([x87 stage 0](#x87-external-benchmarks-pre-registered)). |
-| Producer scripts for `data/runs/x80/x80_labels.npz`, `data/results/x80_probe_geometry.json`, `data/results/confusable_A_auc.json` and `data/runs/x87/x87_x75_qwen_dose_kl.json` | n/a | n/a | Not included in `code/`. The artifacts themselves are released. |
-| Plotting scripts for the paper figures | n/a | n/a | Not part of `code/`. The [claims table](#paper-claims-figures-and-tables-result-files-and-scripts) lists the data each figure is drawn from. |
+| Feature caches `$SWSE_FC/{tag}_A15k_v2(style)_full` and the overlays `{tag}_A15k_{v4,v5}_full` | ~46 GB for nine models | path A: `x71_prepare_dataset.py` in the x87 and x88 stage 0, and `x80_fit_paired_probes.py` | `code/extract_features_v2.py`, then `code/x66_build_v4v5_overlays.py` ([commands](#stage-2-feature-caches-label-overlays-and-the-frozen-split-x66)). Both read `data/pools/cp_15k_clustered_v2.json`. The pilot caches of the upstream chain (`feature_caches/confusable_A_*`) come from `mining/t3`/`t4`. |
+| `data/runs/x87/x75_qwen_prepared/` (`probe_dataset.pt`, `prompt_splits.json`) and the per-model prepared tensors for x88 | 2.2 GB for Qwen | re-running path-A stage 0 and `x71_dose_kl.py` | `x71_prepare_dataset.py` from the feature cache ([x87 stage 0](#x87-external-benchmarks-pre-registered)). The released adapter and dose-KL file record the sha256 of the original `prompt_splits.json`. |
+| Full lm-eval GSM8K logs | n/a | nothing | Not recoverable. The released `x87_gsm8k_*.json` files keep per-question scores but omit the `doc`/`arguments` fields. |
+
+Two smaller gaps:
+
+- The scripts that generated and scored the Llama-era x71/x75 outputs
+  (`data/generations/x71_*`, `x75_*`, `data/runs/x71/scores/`,
+  `data/runs/x75/scores/`) belong to the parent project and are not in
+  `code/`. `x71_analyze.py` runs from the released scores
+  (`--condition <label>=data/runs/x71/scores/x71_<label>.json`, repeated).
+- `data/pools/qwen_clustered_v2.json` carries an earlier Qwen3.5-4B
+  labelling of the 15,000 harmful prompts whose producer is not included.
+  Only its prompt fields are used here.
 
 ## Reproduction guide
 
-The pipeline runs in this order: **mining and dataset freeze → labels →
-feature caches, overlays and splits → experiments.** Each frozen artifact
+The pipeline runs in this order: **mining → upstream labelling of the
+mined pools → dataset freeze → labels → feature caches, overlays and
+splits → experiments.** Each frozen artifact
 is released, so you can start at any stage. Unless noted, run commands from
 the repository root. Each experiment section gives a one-line purpose, the
 commands in order, inputs, outputs and approximate compute. "GPU" means one
@@ -502,11 +608,9 @@ python code/mining/s11_extend_pool_A3.py           # -> data/pools/mined_pool_A3
 python code/mining/s12_extend_pool_A4.py           # -> data/pools/mined_pool_A4_bnd.json, data/results/extend_pool_A4_auc.json  (20k: rejected)
 # validity checks on pool A (outputs not part of the release):
 python code/mining/s7_semantic_separability.py     # BAAI/bge-base-en-v1.5 embedding separability (GPU optional)
-python code/mining/s8_llm_intent_judge.py [--pool P --tag T --n N]   # local GGUF judge; needs s2_cluster_local.py (not included)
+python code/mining/s8_llm_intent_judge.py [--pool P --tag T --n N]   # local GGUF judge (llama-cpp-python, GPU)
 python code/mining/s9_llama_hb_classify.py [--pool P --tag T --n N --seed S | --all]   # Llama-3.2-3B zero-shot H/B (GPU)
-# staging for the external labelling step:
-python code/mining/t12_prepare_a2.py; python code/mining/t14_prepare_a3.py
-python code/mining/t13_prepare_full10k.py; python code/mining/t15_prepare_full15k.py   # need clustered batches (not included)
+# s8 and s9 write llm_judge_<tag>.json / llama_hb_<tag>.jsonl next to the script.
 ```
 
 - *Inputs:* public datasets (`heegyu/wildjailbreak-train`, `bench-llm/or-bench`,
@@ -516,21 +620,110 @@ python code/mining/t13_prepare_full10k.py; python code/mining/t15_prepare_full15
 - *Outputs:* the released ones are `data/pools/mined_pool_*.json` and
   `data/results/{auc_pairings,combined_pool_auc,extend_pool_A{2,3,4}_auc}.json`.
 - *Compute:* CPU, minutes per step; `s1` is dominated by downloads.
-- *Caveats:* `s10`-`s12` need the round parquets written by `s6`.
-  `s8_llm_intent_judge.py` imports `s2_cluster_local.py` and a local GGUF
-  model, neither of which is included. The in-loop filtering trajectory
-  quoted in the paper (0.98 → near chance, and the 0.70 fresh-auditor
-  rebound) comes from the original run log; its per-round result files are
-  not part of this release.
+- *Caveats:* `s10`-`s12` read the round parquets written by `s6`; the
+  released ones are the originals. `s6` is not bit-reproducible on a
+  different library stack (see [Level 2](#level-2-re-run-the-analyses-from-the-released-per-run-artifacts-hf-data-cpu-only)).
+  `s8_llm_intent_judge.py` needs `llama-cpp-python` and the local GGUF judge
+  (see [Python and packages](#python-and-packages)). The in-loop filtering
+  trajectory quoted in the paper (0.98 → near chance) is the per-round OOF
+  AUC that `s6` prints and stores in `data/results/iterative_random_results.json`
+  (not released; `s6` writes it). The 0.70 fresh-auditor rebound comes from
+  the original run log.
 
-### Dataset freeze (released, no script)
+### Upstream labelling chain (`cp_*` pools)
+
+*Purpose:* attach a continuous risk label `T` to the harmful side of the
+mined pools, producing `data/pools/cp_15k_clustered_v2.json`, the harmful
+source pool from which the frozen set, the 30,000-row cache order and every
+feature cache are built. This chain predates the paper and comes from an
+earlier project. Its `T` labels are **not** the paper's labels (those are the
+x63-x65 refusal labels below); the paper uses the pool's prompts, ids and
+order. Each harmful prompt gets 10 responses from Llama-3.2-3B-Instruct (fp16,
+T = 1.0, top-p 0.9, top-k 50, 200 new tokens); the local GGUF judge sorts
+them into harmful-compliance / disguised-harmful / appropriate-refusal
+clusters, and `T = 0.7·safety_score + 0.3·safety_entropy`. Benign rows get
+`T = 0` without generation.
+
+```bash
+# 1) pilot batch: 1,000 harmful + 1,000 benign from pool A (ids 0-1999)
+python code/mining/t0_prepare.py                     # -> data/pools/cp_prompts.json
+python code/mining/t1_generate_responses.py          # GPU -> data/pools/cp_responses.json   [--in --out]
+python code/mining/t2_cluster.py                     # GPU, local judge -> data/pools/cp_clustered.json   [--in --out]
+# 2) remaining 4,000 harmful prompts of pool A (ids 2000-5999): t9 -> t1 -> t2
+bash code/mining/run_rest_labeling.sh                # -> data/pools/cp_rest_{prompts,responses,clustered}.json
+# 3) pool A2 (ids 20000-24999): t12 -> t1 -> t2   (needs mined_pool_A2_rand.json from s10)
+bash code/mining/run_a2_labeling.sh                  # -> data/pools/cp_a2_{prompts,responses,clustered}.json
+# 4) pool A3 (ids 40000-44999): s11 -> t14 -> t1 -> t2 -> t15 merge
+bash code/mining/run_a3_all.sh                       # -> data/pools/cp_a3_*.json, cp_15k_clustered.json, cp_15k_benign.json
+#    (or just the merge: python code/mining/t15_prepare_full15k.py)
+# 5) re-judge every row whose judge output failed to parse or was not a clean partition of the 10 responses
+python code/mining/rejudge_validated.py --in data/pools/cp_15k_clustered.json \
+    --out data/pools/cp_15k_clustered_v2.json        # GPU, local judge   [--max_attempts 3] [--no_fallback]
+```
+
+`run_*.sh` take the interpreter from `PY` (default `python`) and `cd` to the
+repository root themselves; `t1` and `t2` resume from their `--out` file.
+`t13_prepare_full10k.py` is the intermediate 10k+10k merge and is not
+needed for the 15k pool.
+
+- *Outputs:* the released batches `data/pools/cp_{,rest_,a2_,a3_}{prompts,responses,clustered}.json`
+  and `cp_15k_clustered_v2.json`; `cp_15k_benign.json` from `t15`.
+  `cp_15k_clustered.json` (the pre-re-judge merge) is not released but
+  `t15` rebuilds it from the released batches.
+- *Re-judge:* 744 of the 15,000 merged rows were re-judged (338 unparseable,
+  406 with an invalid partition); 597 were repaired by batch retries
+  (`max_tokens` 1,024, temperatures 0.0/0.3/0.7, or 0.3/0.7/1.0 for
+  invalid partitions) and 147 by the per-response fallback. Each repaired
+  row carries an `llm_clustering.rejudge` record.
+- *Checked:* `t0`, `t9`, `t12`, `t14` and `t15` reproduce the released
+  prompt batches and `cp_15k_benign.json` exactly, the merge matches
+  `cp_15k_clustered_v2.json` on all 14,256 rows the re-judge left alone,
+  and `rejudge_validated.py` selects exactly the 744 rows that carry a
+  `rejudge` record. The GPU steps were not re-run.
+- *Pilot probe evaluation (`data/results/confusable_A_auc.json`):*
+  `bash code/mining/run_after_t1.sh` runs `t2` → `t3_extract_features.py`
+  (Llama-3.2-3B last-prompt-token states of the 2,000 pilot prompts into
+  `feature_caches/confusable_A_full`) → `t4_split.py` (stratified 70/30) →
+  `train_probes.py` (MLP and ridge probes on `T`, written to `runs/cpA<N>/`)
+  → `t5_eval.py` (source and risk AUC of every predictor, plus embedding-bag
+  and TF-IDF baselines). It is context for §2.1 only.
+- *Compute:* one GPU. `t1` samples 10 × 200 tokens per prompt; `t2` makes
+  one judge call per prompt.
+
+### Dataset freeze (x61)
 
 The frozen set has 13,527 harmful prompts and 10,500 benign prompts:
 
 - **Harmful side.** The 15,000 harmful rows of the clustered pool, minus
   1,473 rows dropped by a three-judge majority vote (`manifest.json` holds
-  the rule). The retention builder belongs to the parent project.
-  `data/x61_mask_tbg.npy` enforces the result in the feature-cache order.
+  the rule). Three reasoning models each give every prompt one of six codes
+  (N benign; P / X harmful but infeasible without missing private /
+  other context; A / C / O feasible harm). Codes collapse to N, PX and ACO;
+  a prompt is dropped if the three collapsed labels all differ or if the
+  majority is PX.
+
+  ```bash
+  python code/x61_classify_harmful_sixway.py --judge luna       # API -> data/pools/x61_sixway_gpt56_luna_max.jsonl
+  python code/x61_classify_harmful_sixway.py --judge deepseek   # API -> data/pools/x61_sixway_deepseek_v4_0731_max.jsonl
+  python code/x61_classify_harmful_sixway.py --judge glm        # API -> data/pools/x61_sixway_glm_5_2_low.jsonl
+  #   [--limit N] [--concurrency <=20] [--max-cost 50] [--require-complete] [--input ...] [--output ...]
+  python code/build_x61_majority_harmful_promptset.py [--out DIR] [--force]
+  #   CPU -> data/datasets/swse_x61_majority_harmful_v1/{prompts,excluded}.jsonl, manifest.json
+  ```
+
+  The classifier is resumable and append-only, sends one prompt per request
+  and retries invalid answers (up to three attempts; luna gets four, with
+  re-quoted presentations). The builder fails closed on any hash, coverage
+  or duplicate problem; it reads `data/pools/qwen_clustered_v2.json` (prompt
+  fields only, sha256-checked) and cross-tabulates the result against
+  `data/datasets/swse_feasibility_clean_b075_v1/feasibility_decisions.jsonl`.
+  The configured `gemini` judge was not used.
+- **Derived files.** `data/prompts/x63_prompts13527.json` is the
+  `{id: source_id, prompt}` projection of `prompts.jsonl`, in order, and
+  `data/x61_mask_tbg.npy` marks the retained harmful rows (plus all 15,000
+  benign rows) in the 30,000-row cache order (`x80_build_labels.py` checks
+  this). Both were written inline; their content is fully determined by
+  `prompts.jsonl` and the pool order.
 - **Benign side.** The first 10,500 rows of `np.random.RandomState(42).permutation`
   over the `source == "hard"` rows of `cp_15k_benign.json`, applied by
   `x66_split_cache_masked.py --benign_n 10500`.
@@ -539,15 +732,41 @@ The frozen set has 13,527 harmful prompts and 10,500 benign prompts:
 30,000-row order. Harmful rows come first, sorted by id, then benign rows,
 sorted by id.
 
-### Labels: `refusal2` / `comply2` (released)
+### Labels: `refusal2` / `comply2` (x63 → x64 → x65)
 
 Each of the 13,527 harmful prompts was answered 10 times by each model under
 the sampling contract and judged once per method (`refusal2` and `comply2`,
-judge seed 42). The Qwen3.5-4B judge outputs are in `data/judged/`. The
-frozen per-model label files are in `data/labels/`. Downstream code only
-reads these files; the label-building script and the raw responses belong
-to the parent project and are not included. `code/x58_methods.py` holds the
-exact judge prompts and validators reused by every judge script here.
+judge seed 42). `code/x58_methods.py` holds the exact judge prompts and
+validators reused by every judge script here.
+
+```bash
+# x63: 10 sampled responses per prompt, in row shards (the released files use 12 shards of 1,150 rows)
+python code/x63_gen_hpc.py --model Qwen/Qwen3.5-4B --in data/prompts/x63_prompts13527.json \
+    --out data/generations/x63_qwen_0_1150.json --start 0 --end 1150     # GPU   [--batch 16] [--limit N]
+#   or: sbatch --export=ALL,B=$PWD,MODEL_ID=Qwen/Qwen3.5-4B,TAG=qwen,START=0,END=1150 code/x63_gen.sbatch
+# x64: judge every complete row found in data/generations/x63_<tag>_*_*.json (incremental, resumable)
+python code/x64_run.py --tag qwen       # API -> data/judged/x64_{refusal2,comply2}_qwen_s42.jsonl
+#   [--methods refusal2 comply2] [--limit N] [--cap 40] [--threads 500]
+# x65: label files (fails closed unless all 13,527 prompts are judged by both methods)
+python code/x65_build_v4_v5_labels.py --tag qwen   # CPU -> data/labels/qwen_labels_{v4,v5}.json   [--partial]
+```
+
+Tags: `qwen qwen08b qwen2b qwen9b qwen27b llama gemma phi smollm3`. The
+raw responses for all nine models are in `data/generations/`. Only the
+Qwen3.5-4B judge outputs are released (`data/judged/`); the label files for
+all nine models are in `data/labels/`. Rerunning `x65` on the released Qwen
+judgments reproduces `qwen_labels_{v4,v5}.json` exactly.
+`x63_gen_hpc.py` does not read `X63_TRUST_REMOTE_CODE`: it always loads with
+`trust_remote_code=True` (falling back to the image-text auto class for
+multimodal-wrapped models such as Gemma), so for Phi use a transformers
+version its bundled code supports, or edit the call.
+
+- *Compute:* generation runs at roughly 215-255 rows per GPU-hour under the
+  10-sample contract, so a 1,150-row shard needs several GPU-hours. The
+  generator checkpoints atomically after every batch and resumes from its
+  `--out` file, so a job killed at the wall-clock limit (`x63_gen.sbatch`
+  asks for 2 h) can simply be resubmitted. Judging is API-only; `--cap`
+  aborts a run once the reported cost passes the cap (default 40 USD).
 
 ### Stage 2: feature caches, label overlays and the frozen split (x66)
 
@@ -595,11 +814,19 @@ cite `x80_*` numbers as evidence for the paper's claims.
 
 ```bash
 python code/x80_label_audit.py        # CPU; writes data/runs/x80/x80_label_manifest.json, data/results/x80_label_audit.json
+python code/x80_build_labels.py       # CPU; -> data/runs/x80/x80_labels.npz (per-prompt R/H counts in cache-row order)
 python code/x80_fit_paired_probes.py --cache "$SWSE_FC/qwen_A15k_v4_full/hidden_states.pt" \
     --labels data/runs/x80/x80_labels.npz --indices-dir data/runs/x66 \
-    --seed 42 --out-dir data/runs/x80/probes --n-perm 5 --n-boot 50 [--l2-ext]
-# repeat for --seed 123 and --seed 7; --l2-ext is the extended-L2-grid sensitivity run (data/runs/x80/probes_l2ext)
+    --seed 42 --out-dir data/runs/x80/probes --n-perm 5 --n-boot 50
+# repeat for --seed 123 and --seed 7, then the extended-L2-grid sensitivity run for each seed:
+#   ... --l2-ext --out-dir data/runs/x80/probes_l2ext
+python code/x80_probe_geometry.py     # CPU; -> data/results/x80_probe_geometry.json   [--probes-dir --l2ext-dir --out]
 ```
+
+`x80_build_labels.py` and `x80_probe_geometry.py` are the inline steps of
+the original run, extracted unchanged into scripts. From the released files
+they reproduce `x80_labels.npz` (every array equal) and
+`x80_probe_geometry.json` (byte-identical).
 
 - *Compute:* one GPU, up to 3 h per seed (the `x80.sbatch` limit).
 
@@ -731,8 +958,9 @@ has changed. `comply2` must be judged with `--per-response`, one response
 per API call: in the original run, 10-per-call judging failed on 40-50% of
 long-response rows.
 
-To re-run only the analysis from the released judgments, regenerate the
-generations first, because the analyzer checks response hashes.
+The 19 generation files are released. The analyzer checks the judgments'
+response hashes against them, and that each generation file records the
+sha256 of the manifest and KL calibration it was generated from.
 
 - *Compute:* stage 0 plus a 3 GB shard reload; KL calibration about 12 GPU-minutes.
   Generation of 288 cells × 10 responses per target condition (256 × 5 per
@@ -777,8 +1005,23 @@ python code/x75_train_edit.py --probe data/runs/x87/x75_qwen_probes/x75_refusal_
     --out data/runs/x87/x75_qwen_refusal_weighted_true.pt --config "$CFG" --model-source "$SNAP"
 ```
 
+Benign KL of the released adapter against the rank-one scale
+(`data/runs/x87/x87_x75_qwen_dose_kl.json`; descriptive, no later script
+reads it):
+
+```bash
+python code/x71_dose_kl.py --adapter data/runs/x87/x75_qwen_refusal_weighted_true.pt \
+    --label x87_qwen_true --prompt-splits "$PREP/prompt_splits.json" \
+    --out data/runs/x87/x87_x75_qwen_dose_kl.json \
+    --doses -7 -6 -5 -4 -3 -2 2 3 4 --model-source "$SNAP" --config "$CFG"   # GPU, forward passes only
+#   [--batch-size 4] [--subset-batches 16] [--match-v-norm-from <adapter>]
+```
+
+The original run used `--doses -4 -3 -2 2 3 4`; the released file holds the
+nine doses listed above. Dose 0 is rejected (it is the identity edit).
+
 Always pass `--config`. Without it, `lib/edit_common.load_config` falls back
-to `data/runs/x71/x71_config.json`, which is not released. The released
+to `data/runs/x71/x71_config.json`, the Llama-era config. The released
 adapter selects state 31 and trains only `model.layers.30.mlp.down_proj.right`
 (step 200, benign KL 0.0059). Stage 0 took about 5 GPU-minutes with the
 cache resident.
@@ -895,32 +1138,60 @@ python code/x89_analyze.py     # verifies every x87 comparison reproduces, then 
   evaluation split (1,353 harmful prompts).
 - **x71** supplies the compiler: `x71_prepare_dataset.py` and
   `x71_train_edit.py`. `x75_train_edit.py` is a shim over the latter, and
-  the mechanism lives in `lib/edit_rank1.py`. `x71_analyze.py` belongs to
-  the Llama-era experiment and is not needed.
+  the mechanism lives in `lib/edit_rank1.py`. `x71_dose_kl.py` measures
+  benign KL against the scale (used for the Qwen port in x87 stage 0).
+  `x71_analyze.py` belongs to the Llama-era experiment and is not needed;
+  its inputs are in `data/runs/x71/`.
 - **x75** supplies the refusal-weighted probe (`x75_weighting.py`,
   `x75_prepare_weighted_probe.py`, `x75_train_weighted_probe.py`). The
   stand-alone Llama x75 experiment (`x75_freeze_config.py`,
   `x75_preflight.py`, `x75_dose_kl.py`, `x75_analyze.py`) is method
-  provenance only, and its inputs are not released. The paper reports the
-  Qwen-native port reproduced in x87 stage 0.
+  provenance only. Its artifacts are in `data/runs/x75/` and the edited-model
+  responses in `data/generations/x75_*.json`, but the Llama-era generation
+  and scoring scripts are not included. The paper reports the Qwen-native
+  port reproduced in x87 stage 0.
+
+### Figures
+
+The paper's figures are drawn by `code/figures/`. Each Python script writes
+a PDF into `figures/` at the repository root (git-ignored), or into
+`--out-dir`. They need `matplotlib`, `numpy` and `scipy`, and run on CPU in
+seconds.
+
+```bash
+python code/figures/fig_insertion_dist.py   # -> figures/insertion-dist.pdf      (data/runs/x83/x83_refusal_*.jsonl, x83_detect.json)
+python code/figures/fig56.py                # -> figures/projection.pdf, heatmap.pdf
+                                            #    (x85 shards + judgments; asserts the recomputed rho = frozen 0.653)
+python code/figures/fig_dose.py             # -> figures/dose-curves.pdf         (x87_external_safety_utility.json, x89_positive_dose_extension.json)
+python code/figures/fig_transfer.py         # -> figures/transfer-endpoints.pdf  (x88_cross_model_deep_dose.json)
+# TikZ schematics (any TeX distribution with tikz/standalone):
+pdflatex -output-directory=figures -jobname=insertion-workflow code/figures/fig-workflow.tex
+pdflatex -output-directory=figures -jobname=crossed-grid       code/figures/fig-crossed.tex
+```
+
+`fig56.py` needs the 3 GB of x85 shards; the others read only
+`data/results/` or small run files. `fig_dose.py` shades the registered
+±0.02 non-inferiority margin, as in the paper. The TikZ sources hard-code
+the design counts (for example the 99-word lexicon and the 96 × 24 grid).
 
 ## Paper claims, figures and tables: result files and scripts
 
 | Paper element | Claim / content | Result file(s) | Producing script(s) | Status |
 |---|---|---|---|---|
-| §2.1, delexicalization | Filtering suppresses one auditor, not the lexical signal. The 15k pool is at chance for words (0.51) but not for characters (0.62); growing to 20k restores separability (0.72). | `data/results/extend_pool_A3_auc.json`, `extend_pool_A4_auc.json`; context: `auc_pairings.json`, `combined_pool_auc.json`, `confusable_A_auc.json` | `mining/s11_extend_pool_A3.py`, `s12_extend_pool_A4.py`, `s2_auc.py`, `s3_combined_pool.py` (`confusable_A_auc.json`: producer not included) | Property of the pools, not of a model. The in-loop trajectory (0.98 → near chance) and the 0.70 rebound come from the run log, with no result file. |
-| §2.2 and the insertion-workflow figure | One inserted harm word raises refusal +0.31 / +0.19 / +0.33 (start/middle/end); the detection gate does not moderate it. | `data/results/x83_keyword_insertion.json` | `x83_*.py` | Primary analysis frozen before outcomes |
-| Insertion-distribution figure | Per-prompt refusal shifts by position | drawn from `data/runs/x83/x83_refusal_{O,S,M,E}.jsonl`, `x83_detect.json` | (plotting script not included) | |
-| §3, path B: crossed decomposition, projection figure | A held-out shared boundary direction (+6.28 / +7.20) whose projection tracks the refusal change (ρ 0.65 / 0.63) | `data/results/x85_crossed_keyword_latent.json`, `x85_crossed_keyword_directions.npz`, `x85_crossed_keyword_levels.json` | `x85_*.py` | Observational. The projection figure is recomputed from the x85 shards (not released; regenerable). |
-| Heatmap figure ("where the reaction lives") | Word identity dominates at the word token; the refusal association appears at the boundary tokens from mid-depth on | `data/results/x85_crossed_keyword_latent_allstates.json` (+ `_state0_instruction.json`) | `x85_analyze.py` with `--states/--positions` (see x85) | Secondary, descriptive |
+| §2.1, delexicalization | Filtering suppresses one auditor, not the lexical signal. The 15k pool is at chance for words (0.51) but not for characters (0.62); growing to 20k restores separability (0.72). | `data/results/extend_pool_A3_auc.json`, `extend_pool_A4_auc.json`; context: `auc_pairings.json`, `combined_pool_auc.json`, `confusable_A_auc.json` | `mining/s11_extend_pool_A3.py`, `s12_extend_pool_A4.py`, `s2_auc.py`, `s3_combined_pool.py`; `confusable_A_auc.json`: `mining/run_after_t1.sh` (`t2` → `t3` → `t4` → `train_probes.py` → `t5_eval.py`) | Property of the pools, not of a model. The in-loop trajectory (0.98 → near chance) is the per-round OOF AUC of `mining/s6` (its results file is not released); the 0.70 rebound comes from the run log. |
+| Frozen dataset and labels (§2, appendix) | 13,527 harmful prompts kept by a three-judge majority vote; per-model refusal rates over 10 samples | `data/datasets/swse_x61_majority_harmful_v1/`, `data/labels/`, `data/judged/` | `x61_classify_harmful_sixway.py`, `build_x61_majority_harmful_promptset.py`; `x63_gen_hpc.py` → `x64_run.py` → `x65_build_v4_v5_labels.py`; harmful source pool: the [upstream labelling chain](#upstream-labelling-chain-cp_-pools) | Builders reproduce the released files from released inputs |
+| §2.2 and the insertion-workflow figure | One inserted harm word raises refusal +0.31 / +0.19 / +0.33 (start/middle/end); the detection gate does not moderate it. | `data/results/x83_keyword_insertion.json` | `x83_*.py`; figure: `figures/fig-workflow.tex` (`insertion-workflow.pdf`) | Primary analysis frozen before outcomes |
+| Insertion-distribution figure | Per-prompt refusal shifts by position | drawn from `data/runs/x83/x83_refusal_{O,S,M,E}.jsonl`, `x83_detect.json` | `figures/fig_insertion_dist.py` (`insertion-dist.pdf`) | |
+| §3, path B: crossed decomposition, projection figure | A held-out shared boundary direction (+6.28 / +7.20) whose projection tracks the refusal change (ρ 0.65 / 0.63) | `data/results/x85_crossed_keyword_latent.json`, `x85_crossed_keyword_directions.npz`, `x85_crossed_keyword_levels.json` | `x85_*.py`; figure: `figures/fig56.py` (`projection.pdf`) | Observational. The projection figure is recomputed from the released x85 shards. |
+| Heatmap figure ("where the reaction lives") | Word identity dominates at the word token; the refusal association appears at the boundary tokens from mid-depth on | `data/results/x85_crossed_keyword_latent_allstates.json` (+ `_state0_instruction.json`) | `x85_analyze.py` with `--states/--positions` (see x85); figure: `figures/fig56.py` (`heatmap.pdf`) | Secondary, descriptive |
 | §3, causal intervention | Subtracting lowers refusal 0.080, adding raises it 0.086; dose-ordered; beats KL-matched nulls; final `"\n\n"` token carries it; `comply2` mirrors; benign cost +0.058 | `data/results/x86_boundary_intervention.json` | `x86_*.py` | Pre-registered gates G0-G3 pass |
-| §3 and appendix, path A | Refusal-weighted probe compiled into a rank-one `down_proj` edit (Qwen-native port) | `data/runs/x87/x75_qwen_*`, `x87_x75_qwen_config.json`, `x87_x75_qwen_dose_kl.json` | `x71_prepare_dataset.py`, `x75_prepare_weighted_probe.py`, `x75_train_weighted_probe.py`, `x75_train_edit.py`, `lib/edit_rank1.py` | Method; the two paths converge in position and behavior (no cosine between them is measured) |
-| Crossed-design figure (appendix) | Schematic of the 96 × 24 design and folds | design in `data/runs/x85/x85_cohort.json` | `x85_build_cohort.py` | |
+| §3 and appendix, path A | Refusal-weighted probe compiled into a rank-one `down_proj` edit (Qwen-native port) | `data/runs/x87/x75_qwen_*`, `x87_x75_qwen_config.json`, `x87_x75_qwen_dose_kl.json` | `x71_prepare_dataset.py`, `x75_prepare_weighted_probe.py`, `x75_train_weighted_probe.py`, `x75_train_edit.py`, `lib/edit_rank1.py`; dose-KL: `x71_dose_kl.py` | Method; the two paths converge in position and behavior (no cosine between them is measured) |
+| Crossed-design figure (appendix) | Schematic of the 96 × 24 design and folds | design in `data/runs/x85/x85_cohort.json` | `x85_build_cohort.py`; figure: `figures/fig-crossed.tex` (`crossed-grid.pdf`) | |
 | §4 and the external-evaluation table | Hard-1K refusal −0.032 (write −0.5) / −0.078 (rank-one −3), superiority passes; guards mixed (four of six bounds outside 0.02); sign control +3 mirrors | `data/results/x87_external_safety_utility.json`; the write +0.5 column comes from `x89_positive_dose_extension.json` | `x87_*.py`, `x89_analyze.py` | Pre-registered (x87 conditions); the +0.5 column is descriptive |
-| Dose-curve figure | Dose response of both families on the four endpoints, both signs | `x87_external_safety_utility.json`, `x89_positive_dose_extension.json`, `x87_gsm8k_posthoc.json` | `x87_analyze.py`, `x89_analyze.py`, `x87_gsm8k_analyze.py` | Deep doses, positive doses and GSM8K are post hoc |
-| §5 and the transfer figure | The write at −1.5 lowers Hard-1K on 8/8 models with small costs; the rank-one edit at −6 (and −3) overshoots off its home model | `data/results/x88_cross_model_deep_dose.json` | `x88_*.py` | Exploratory, `claimable: false` |
+| Dose-curve figure | Dose response of both families on the four endpoints, both signs | `x87_external_safety_utility.json`, `x89_positive_dose_extension.json`; GSM8K (text only): `x87_gsm8k_posthoc.json` | `x87_analyze.py`, `x89_analyze.py`, `x87_gsm8k_analyze.py`; figure: `figures/fig_dose.py` (`dose-curves.pdf`) | Deep doses, positive doses and GSM8K are post hoc |
+| §5 and the transfer figure | The write at −1.5 lowers Hard-1K on 8/8 models with small costs; the rank-one edit at −6 (and −3) overshoots off its home model | `data/results/x88_cross_model_deep_dose.json` | `x88_*.py`; figure: `figures/fig_transfer.py` (`transfer-endpoints.pdf`) | Exploratory, `claimable: false` |
 | Supporting (not in the headline) | Removing a discovery-fitted word: inconclusive; ignore-instructions raise refusal | `x81_lexical_trigger.json`, `x81_posthoc_fragment_sensitivity.json`, `x81_de_self_recovery.json` | `x81*.py` | Supporting context |
-| Not evidence | Paired refusal/compliance probes; primary gate failed | `x80_label_audit.json`, `x80_probe_geometry.json` | `x80_*.py` | Do not cite |
+| Not evidence | Paired refusal/compliance probes; primary gate failed | `x80_label_audit.json`, `x80_probe_geometry.json` | `x80_label_audit.py`, `x80_build_labels.py`, `x80_fit_paired_probes.py`, `x80_probe_geometry.py` | Do not cite |
 
 ## Running the tests
 
@@ -941,13 +1212,14 @@ functions (58 passed in our check).
 
 ## Notes on the Slurm `.sbatch` files
 
-`code/x80.sbatch`, `x81.sbatch`, `x83.sbatch`, `x85.sbatch` and `x86.sbatch`
-are the wrappers used for the GPU stages. x87-x89 had no wrapper in this
+`code/x63_gen.sbatch`, `x80.sbatch`, `x81.sbatch`, `x83.sbatch`, `x85.sbatch`
+and `x86.sbatch` are the wrappers used for the GPU stages. x87-x89 had no wrapper in this
 release; run their commands directly or wrap them the same way. Each file
 dispatches on environment variables:
 
 | File | Variables | Stages |
 |---|---|---|
+| `x63_gen.sbatch` | `MODEL_ID`, `TAG`, `START`, `END`, optional `BATCH`, `LIMIT` | 10-sample generation for one row shard of one model -> `data/generations/x63_<TAG>_<START>_<END>.json` |
 | `x80.sbatch` | `SEED`, optional `EXT=1` | paired probes for one seed (`EXT` = extended L2 grid) |
 | `x81.sbatch` | `STAGE` | `fills`, `semantics`, `gen_A`/`gen_B`/`gen_C`, `build_de`, `gen_P`/`gen_D`/`gen_E` |
 | `x83.sbatch` | `STAGE` | `detect`, `gen_O`/`gen_S`/`gen_M`/`gen_E` |

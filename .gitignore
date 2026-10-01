@@ -15,3 +15,7 @@ venv/
 
 # Feature caches and model-snapshot links created by code/link_model_snapshots.py
 /feature_caches/
+
+# Figure outputs of code/figures/ and probe runs written by code/mining/train_probes.py
+/figures/
+/runs/

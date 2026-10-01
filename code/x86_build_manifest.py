@@ -413,6 +413,7 @@ def main() -> None:
         "status": status,
         "model_id": MODEL_ID,
         "model_snapshot": cohort["model_snapshot"],
+        "plan": "knowledge/plans/x86-crossed-keyword-boundary-intervention.md",
         "x85_cohort": file_record(cohort_file),
         "x85_cohort_sha256": cohort["cohort_sha256"],
         "template_audit": cohort["template_audit"],
