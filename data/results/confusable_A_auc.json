@@ -1,0 +1,44 @@
+[
+  {
+    "predictor": "MLP probe best-layer (17)",
+    "auc_source": 0.7159183673469387,
+    "auc_risk": 0.7299573124378692,
+    "score_std": 0.2506691515445709
+  },
+  {
+    "predictor": "MLP probe concat",
+    "auc_source": 0.7259977324263038,
+    "auc_risk": 0.765148236945208,
+    "score_std": 0.2441502809524536
+  },
+  {
+    "predictor": "Linear probe best-layer (11)",
+    "auc_source": 0.7453344671201814,
+    "auc_risk": 0.7184492134962868,
+    "score_std": 0.21360871508259374
+  },
+  {
+    "predictor": "Linear probe concat",
+    "auc_source": 0.6920578231292517,
+    "auc_risk": 0.6963978714695047,
+    "score_std": 0.25661645499453695
+  },
+  {
+    "predictor": "Embedding bag (MLP)",
+    "auc_source": 0.6483900226757369,
+    "auc_risk": 0.6692357172095199,
+    "score_std": 0.14938583970069885
+  },
+  {
+    "predictor": "Embedding bag (Linear)",
+    "auc_source": 0.6022902494331065,
+    "auc_risk": 0.6335886790246186,
+    "score_std": 0.024912526831030846
+  },
+  {
+    "predictor": "TF-IDF",
+    "auc_source": 0.5548752834467119,
+    "auc_risk": 0.5822817379100638,
+    "score_std": 0.06555085693484176
+  }
+]

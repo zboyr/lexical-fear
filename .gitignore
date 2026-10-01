@@ -1,0 +1,17 @@
+# Secrets (the judge key is read from .env at the repository root)
+.env
+.graph_token
+
+__pycache__/
+*.pyc
+logs/
+.venv/
+venv/
+
+# The full data/ tree is hosted on Hugging Face (see README "Getting the data");
+# only the final result files are versioned here.
+/data/*
+!/data/results/
+
+# Feature caches and model-snapshot links created by code/link_model_snapshots.py
+/feature_caches/

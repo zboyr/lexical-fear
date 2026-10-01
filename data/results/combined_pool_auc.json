@@ -1,0 +1,34 @@
+{
+  "n_harmful": 5000,
+  "n_benign": 5000,
+  "auc_mean": 0.9123,
+  "auc_std": 0.0032,
+  "components": [
+    "jbb",
+    "xstest",
+    "orbench",
+    "wjb_adv"
+  ],
+  "loo": [
+    {
+      "without": "jbb",
+      "auc_mean": 0.9144,
+      "auc_std": 0.0086
+    },
+    {
+      "without": "xstest",
+      "auc_mean": 0.9193,
+      "auc_std": 0.0024
+    },
+    {
+      "without": "orbench",
+      "auc_mean": 0.9273,
+      "auc_std": 0.0049
+    },
+    {
+      "without": "wjb_adv",
+      "auc_mean": 0.8464,
+      "auc_std": 0.0235
+    }
+  ]
+}

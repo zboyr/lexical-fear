@@ -1,0 +1,473 @@
+{
+ "experiment": "x85",
+ "status": "representation_complete_behavior_complete",
+ "scope": "Qwen3.5-4B x83 snapshot; 96 prompts x 24 harm/neutral word pairs; append position",
+ "config": {
+  "states": [
+   0
+  ],
+  "positions": [
+   "instruction_last"
+  ],
+  "primary_states_available": [],
+  "rank": 4,
+  "bootstrap": 10,
+  "randomization": 10,
+  "seed": 85
+ },
+ "inputs": {
+  "cohort": {
+   "path": "data/runs/x85/x85_cohort.json",
+   "size_bytes": 7569105,
+   "sha256": "d219ae6bd43b9da93fb32fc700e34773dde3b685d50cf305f0630283b9d6cd88"
+  },
+  "feature_shards": [
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_000-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "3bb1ec7ba3421e54d0a66ff0b038400fedf38cac636af28bd637f81c8ae67d6d"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_001-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "77fe5f75471a62efe2b0a03142f0b4a200254c540390df8b835b6b0a22d46bc7"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_002-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "2dc131a8a22345874aeef5721fd09484bae8ca2184902d141b3cd97096ed5827"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_003-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "61b68cd540de555b4ef55fecb02e103cbde3bf71684e58fca7c85cd3374505b5"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_004-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "f23e447b109da20dd0f5140a1d45654055257516d6992cddd4aa78d63bc384d0"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_005-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "ed5ba36436564947bf41ac93f677189a66ac55d021b4ba178f70aaaf0263ad48"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_006-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "9d20a2760cff071c0ea9ac626a96e6b9c427e7d2504110981a73af70c1c7d5a1"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_007-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "3aa09fc2641b93c980d3741c52def233c9f62cf2b1448eb3a784d6fba57c4021"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_008-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "c8b4b62d96b6983ed1d499b572833c486f26028e651eb8a172c0a353b0baaa37"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_009-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "cc61655940e549ad48128105f1e4c62a4ba0bf3d5a94d5576572982e061a54f3"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_010-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "f318b00e53df737f9ac01af30b254c65d84088c61a2e147301facaf30d81ac94"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_011-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "281c1aa10cb405b31474d71f4f352486812266db86c02eb04d235b50c3519a8f"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_012-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "8dbcfa965f654bbefc61326ed0eedee006cd29a11fef997867568be9f65ddcdc"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_013-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "c8ebfb5b089b5c817e8326a934eb77d0272f21bb05241466ae3efad9c776288a"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_014-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "2d2aba5663885c7360ad2d0d4b192d8140619168758acee5228e8b077be8fc8d"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_015-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "f7777c0ad2ef3317649571fc9b9ba78e258b7212ea1269e9d5d053c38feeb71c"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_016-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "7f31e9e3844a7f8100eeb270402f99006e85302b621f8657be194dc11af11200"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_017-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "324352d81a6200e16f2b485dfa59d6fd57563d81b87bad463684908f2c07556a"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_018-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "48cfc26d37480f9af85d278f6d4ca8d1981ab4065ae0cc0b9c9b6cca5fdc7ce2"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_019-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "12324ffa7d430923e06990016f557b8a615b94248c2d908170164d6645b4afd0"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_020-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "b27140f641325c17b1baac41731087e511de804c343947cb2b459e4d8484a33c"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_021-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "41fe00ec4779cd5fac8891d42a6102419d49d9d567b47d9d23971b7d11361703"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_022-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "b7bbe6141c96052328fa687089eea7f0505bf584c5f0b817d99cea6164d1a206"
+   },
+   {
+    "path": "data/runs/x85/features/x85_hidden_shard_023-of-024.pt",
+    "size_bytes": 132494858,
+    "sha256": "f83b33df758916b6619a77af174d0e34d560a267283841c8ed2e654abaed87d7"
+   }
+  ]
+ },
+ "feature_metadata": {
+  "num_states": 33,
+  "hidden_dim": 2560
+ },
+ "representation": {
+  "instruction_last": {
+   "0": {
+    "grand_norm": 0.21898256242275238,
+    "positive_cell_fraction": 1.0,
+    "positive_prompt_mean_fraction": 1.0,
+    "positive_word_mean_fraction": 1.0,
+    "energy": {
+     "global": 110.48454093933105,
+     "prompt": 3.700467276351871e-11,
+     "word": 1508.3158264160156,
+     "interaction": 3.8398052099042346e-11,
+     "total": 1618.80029296875,
+     "fractions": {
+      "global": 0.06825087777610372,
+      "prompt": 2.2859319289876768e-14,
+      "word": 0.9317491681755785,
+      "interaction": 2.3720067426367584e-14
+     }
+    },
+    "word_mean_singular_values": [
+     1.1648533344268799,
+     1.0844573974609375,
+     1.0275105237960815,
+     1.0083942413330078
+    ],
+    "word_mean_rank_energy": [
+     0.08046749234199524,
+     0.15021085739135742,
+     0.2128218412399292,
+     0.2731248140335083
+    ],
+    "interaction_singular_values": [
+     6.097372988733696e-06,
+     4.5071911358718353e-07,
+     4.285525108116417e-07,
+     4.104193465082062e-07
+    ],
+    "interaction_rank_energy": [
+     0.9682251214981079,
+     0.9735156893730164,
+     0.9782986640930176,
+     0.9826855063438416
+    ],
+    "word_mean_cosine_to_global": [
+     0.272142618894577,
+     0.27919137477874756,
+     0.17160728573799133,
+     0.26242101192474365,
+     0.19487297534942627,
+     0.24580314755439758,
+     0.24819444119930267,
+     0.3571316599845886,
+     0.26018598675727844,
+     0.319778174161911,
+     0.3209439814090729,
+     0.16555730998516083,
+     0.3388940989971161,
+     0.23304925858974457,
+     0.2818903923034668,
+     0.3499252200126648,
+     0.32993921637535095,
+     0.30176258087158203,
+     0.2346610426902771,
+     0.1965980976819992,
+     0.3339875042438507,
+     0.23956668376922607,
+     0.22238104045391083,
+     0.21849219501018524
+    ],
+    "prompt_mean_cosine_to_global": [
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657,
+     0.9999998211860657
+    ],
+    "cross_validation": [
+     {
+      "fold": 0,
+      "quadrants": {
+       "seen_prompt_seen_word": {
+        "n_cells": 1296,
+        "mean_projection": 0.23705653846263885,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "new_prompt_seen_word": {
+        "n_cells": 432,
+        "mean_projection": 0.23705653846263885,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0000001192092896
+       },
+       "seen_prompt_new_word": {
+        "n_cells": 432,
+        "mean_projection": 0.08872118592262268,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 0.24120068550109863
+       },
+       "new_prompt_new_word": {
+        "n_cells": 144,
+        "mean_projection": 0.08872119337320328,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 0.24120068550109863
+       }
+      }
+     },
+     {
+      "fold": 1,
+      "quadrants": {
+       "seen_prompt_seen_word": {
+        "n_cells": 1296,
+        "mean_projection": 0.23976430296897888,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "new_prompt_seen_word": {
+        "n_cells": 432,
+        "mean_projection": 0.2397642880678177,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "seen_prompt_new_word": {
+        "n_cells": 432,
+        "mean_projection": 0.08663292229175568,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 0.2447974979877472
+       },
+       "new_prompt_new_word": {
+        "n_cells": 144,
+        "mean_projection": 0.08663292974233627,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 0.2447975128889084
+       }
+      }
+     },
+     {
+      "fold": 2,
+      "quadrants": {
+       "seen_prompt_seen_word": {
+        "n_cells": 1296,
+        "mean_projection": 0.24493059515953064,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "new_prompt_seen_word": {
+        "n_cells": 432,
+        "mean_projection": 0.24493058025836945,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "seen_prompt_new_word": {
+        "n_cells": 432,
+        "mean_projection": 0.06294123083353043,
+        "positive_fraction": 0.8333333333333334,
+        "mean_direction_cosine": 0.17140762507915497
+       },
+       "new_prompt_new_word": {
+        "n_cells": 144,
+        "mean_projection": 0.06294123083353043,
+        "positive_fraction": 0.8333333333333334,
+        "mean_direction_cosine": 0.17140762507915497
+       }
+      }
+     },
+     {
+      "fold": 3,
+      "quadrants": {
+       "seen_prompt_seen_word": {
+        "n_cells": 1296,
+        "mean_projection": 0.23638486862182617,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "new_prompt_seen_word": {
+        "n_cells": 432,
+        "mean_projection": 0.23638488352298737,
+        "positive_fraction": 1.0,
+        "mean_direction_cosine": 1.0
+       },
+       "seen_prompt_new_word": {
+        "n_cells": 432,
+        "mean_projection": 0.0904436931014061,
+        "positive_fraction": 0.8333333333333334,
+        "mean_direction_cosine": 0.2451811134815216
+       },
+       "new_prompt_new_word": {
+        "n_cells": 144,
+        "mean_projection": 0.0904436931014061,
+        "positive_fraction": 0.8333333333333334,
+        "mean_direction_cosine": 0.2451811134815216
+       }
+      }
+     }
+    ],
+    "double_heldout": {
+     "n_cells": 576,
+     "mean_projection": 0.08218475834776957,
+     "positive_fraction": 0.9166666666666666
+    }
+   }
+  }
+ },
+ "tbg_minus1_vs_tbg_global_cosine": {},
+ "primary_representation_gate": {},
+ "representation_gate_pass": false,
+ "behavior": {
+  "n_edges": 576,
+  "mean_r_H_minus_r_N": 0.33784722222222224,
+  "mean_r_H_minus_r_O": 0.32413194444444443,
+  "mean_r_N_minus_r_O": -0.013715277777777785,
+  "per_position_state": {
+   "instruction_last": {
+    "0": {
+     "raw": {
+      "n": 576,
+      "rho": 0.034140191567542506,
+      "p": 0.41345820343497935
+     },
+     "two_way_residualized": {
+      "n": 576,
+      "rho": 0.012673291819158671,
+      "p": 0.7615008730846006
+     }
+    }
+   }
+  }
+ },
+ "behavior_association_gate": {},
+ "behavior_gate_pass": false,
+ "interpretation_rule": "A representation-only pass is a shared harm-word shift. It is refusal-associated only if the separate behavior gate passes, and causal only after the optional intervention stage."
+}

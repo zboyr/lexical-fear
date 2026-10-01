@@ -1,0 +1,114 @@
+[
+  {
+    "pairing": "jbb harmful vs benign",
+    "n_harmful": 100,
+    "n_benign": 100,
+    "auc_mean": 0.5875,
+    "auc_std": 0.0562
+  },
+  {
+    "pairing": "xstest unsafe vs safe",
+    "n_harmful": 200,
+    "n_benign": 250,
+    "auc_mean": 0.6283,
+    "auc_std": 0.1851
+  },
+  {
+    "pairing": "orbench toxic vs hard-1k",
+    "n_harmful": 655,
+    "n_benign": 1319,
+    "auc_mean": 0.7934,
+    "auc_std": 0.0552
+  },
+  {
+    "pairing": "orbench toxic vs 80k",
+    "n_harmful": 655,
+    "n_benign": 5000,
+    "auc_mean": 0.8775,
+    "auc_std": 0.0492
+  },
+  {
+    "pairing": "toxicchat toxic/jb vs clean",
+    "n_harmful": 375,
+    "n_benign": 4603,
+    "auc_mean": 0.9277,
+    "auc_std": 0.0142
+  },
+  {
+    "pairing": "wjb adversarial_harmful vs adversarial_benign",
+    "n_harmful": 5000,
+    "n_benign": 5000,
+    "auc_mean": 0.9472,
+    "auc_std": 0.0041
+  },
+  {
+    "pairing": "phtest vs salad base",
+    "n_harmful": 5000,
+    "n_benign": 2073,
+    "auc_mean": 0.9835,
+    "auc_std": 0.0046
+  },
+  {
+    "pairing": "falsereject vs salad base",
+    "n_harmful": 5000,
+    "n_benign": 5000,
+    "auc_mean": 0.9905,
+    "auc_std": 0.001
+  },
+  {
+    "pairing": "phtest vs wjb vanilla_harmful",
+    "n_harmful": 5000,
+    "n_benign": 2073,
+    "auc_mean": 0.9911,
+    "auc_std": 0.0016
+  },
+  {
+    "pairing": "wjb vanilla_harmful vs vanilla_benign",
+    "n_harmful": 5000,
+    "n_benign": 5000,
+    "auc_mean": 0.9938,
+    "auc_std": 0.0005
+  },
+  {
+    "pairing": "coconot original vs contrast (safety)",
+    "n_harmful": 3504,
+    "n_benign": 149,
+    "auc_mean": 0.9939,
+    "auc_std": 0.0043
+  },
+  {
+    "pairing": "phtest vs alert plain",
+    "n_harmful": 5000,
+    "n_benign": 2073,
+    "auc_mean": 0.9956,
+    "auc_std": 0.0011
+  },
+  {
+    "pairing": "falsereject vs alert plain",
+    "n_harmful": 5000,
+    "n_benign": 5000,
+    "auc_mean": 0.9975,
+    "auc_std": 0.0011
+  },
+  {
+    "pairing": "falsereject vs wjb vanilla_harmful",
+    "n_harmful": 5000,
+    "n_benign": 5000,
+    "auc_mean": 0.9976,
+    "auc_std": 0.0008
+  },
+  {
+    "pairing": "phtest vs salad attack_enhanced",
+    "n_harmful": 4997,
+    "n_benign": 2073,
+    "auc_mean": 0.9994,
+    "auc_std": 0.0006
+  },
+  {
+    "pairing": "falsereject vs salad attack_enhanced",
+    "n_harmful": 4997,
+    "n_benign": 5000,
+    "auc_mean": 0.9999,
+    "auc_std": 0.0001
+  }
+]
