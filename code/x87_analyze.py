@@ -15,6 +15,8 @@ from x87_common import (
     MARGINS,
     RESULTS,
     RUN,
+    X89_RUN,
+    artifact_path,
     atomic_json,
     file_record,
     paired_arrays,
@@ -31,6 +33,7 @@ IFEVAL_KEYS = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", default=str(RUN))
+    parser.add_argument("--x89-run-dir", default=str(X89_RUN))
     parser.add_argument("--out", default=str(RESULTS / "x87_external_safety_utility.json"))
     return parser.parse_args()
 
@@ -71,11 +74,11 @@ def comparison(
 
 def main() -> None:
     args = parse_args()
-    run = Path(args.run_dir)
+    run, x89_run = Path(args.run_dir), Path(args.x89_run_dir)
 
     # Post-hoc dose extension: analyzed only when every artifact exists.
     extension_paths = {
-        condition: run / f"x87_orbench_{condition}.json"
+        condition: artifact_path("orbench", condition, run, x89_run)
         for condition in EXTENSION_CONDITIONS
     }
     present = [c for c, p in extension_paths.items() if p.exists()]
@@ -87,9 +90,8 @@ def main() -> None:
     or_hard, or_toxic, strong, ifeval = {}, {}, {}, {}
     for condition in CONDITIONS + extension:
         paths = {
-            "orbench": run / f"x87_orbench_{condition}.json",
-            "strongreject": run / f"x87_strongreject_{condition}.json",
-            "ifeval": run / f"x87_ifeval_{condition}.json",
+            kind: artifact_path(kind, condition, run, x89_run)
+            for kind in ("orbench", "strongreject", "ifeval")
         }
         for path in paths.values():
             inputs.append(file_record(path))

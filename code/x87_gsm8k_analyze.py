@@ -15,6 +15,8 @@ from x87_common import (
     ALPHA,
     RESULTS,
     RUN,
+    X89_RUN,
+    artifact_path,
     atomic_json,
     file_record,
     paired_arrays,
@@ -29,6 +31,7 @@ FILTERS = ("strict-match", "flexible-extract")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", default=str(RUN))
+    parser.add_argument("--x89-run-dir", default=str(X89_RUN))
     parser.add_argument("--out", default=str(RESULTS / "x87_gsm8k_posthoc.json"))
     return parser.parse_args()
 
@@ -66,10 +69,10 @@ def condition_scores(path: Path) -> tuple[dict[str, dict[str, float]], dict]:
 
 def main() -> None:
     args = parse_args()
-    run = Path(args.run_dir)
+    run, x89_run = Path(args.run_dir), Path(args.x89_run_dir)
     scores, inputs = {}, {}
     for condition in ALL_CONDITIONS:
-        path = run / f"x87_gsm8k_{condition}.json"
+        path = artifact_path("gsm8k", condition, run, x89_run)
         scores[condition], payload = condition_scores(path)
         inputs[condition] = {
             "file": file_record(path),

@@ -47,6 +47,16 @@ EXTENSION_CONDITIONS = (
     "x75_m1", "x75_m2", "x75_p1", "x75_p2",
 )
 ALL_CONDITIONS = CONDITIONS + EXTENSION_CONDITIONS
+# The x89 wave's artifacts are named for x89 and live in its own run directory.
+X89_RUN = DATA / "runs" / "x89"
+X89_CONDITIONS = EXTENSION_CONDITIONS[-7:]
+
+
+def artifact_path(kind: str, condition: str, run: Path = RUN, x89_run: Path = X89_RUN) -> Path:
+    """Per-condition benchmark artifact (kind: orbench, strongreject, ifeval, gsm8k)."""
+    if condition in X89_CONDITIONS:
+        return Path(x89_run) / f"x89_{kind}_{condition}.json"
+    return Path(run) / f"x87_{kind}_{condition}.json"
 BENCHMARKS = ("orbench_hard", "orbench_toxic", "strongreject")
 
 ORBENCH_REPO = "bench-llm/or-bench"

@@ -1,6 +1,6 @@
 # Language Models "Fear" Harmful Words: Causally Reducing a Lexically Triggered Driver of Over-Refusal
 
-Code and data for the paper of the same title, submitted to the NeurIPS 2026 workshop *Foundations of Language Model Security* (FLMSec).
+Code and data for the paper of the same title, accepted at the NeurIPS 2026 workshop *Foundations of Language Model Security* (FLMSec).
 
 Aligned language models refuse harmless requests partly because of the words
 those requests contain. The paper calls this the model's "fear" of harmful
@@ -261,24 +261,18 @@ python code/x89_analyze.py      --out /tmp/lf_check/x89_positive_dose_extension.
 makes it the quickest end-to-end check of the pre-registered external
 evaluation.
 
-`x87_analyze.py` and `x87_gsm8k_analyze.py` cannot run unmodified on the
-released layout. The x89 conditions were appended to `EXTENSION_CONDITIONS`
-in `code/x87_common.py`, but their artifacts live in `data/runs/x89/` under
-an `x89_` prefix, so the analyzer stops with `FATAL: partial dose-extension
-artifacts`. To re-run them, build a temporary run directory that aliases
-the x89 files under x87 names:
+`x87_analyze.py` and `x87_gsm8k_analyze.py` re-run the pre-registered
+external evaluation and the post-hoc GSM8K check. The x89 conditions are the
+tail of `EXTENSION_CONDITIONS` in `code/x87_common.py`, and their artifacts
+live in `data/runs/x89/` under an `x89_` prefix; both analyzers find them
+there (`--x89-run-dir`, default `data/runs/x89`):
 
 ```bash
-mkdir -p /tmp/lf_x87 && cd /tmp/lf_x87
-for f in "$OLDPWD"/data/runs/x87/*; do ln -s "$f" .; done
-for f in "$OLDPWD"/data/runs/x89/x89_*; do b=$(basename "$f"); ln -s "$f" "x87_${b#x89_}"; done
-cd "$OLDPWD"
-python code/x87_analyze.py       --run-dir /tmp/lf_x87 --out /tmp/lf_check/x87_external_safety_utility.json
-python code/x87_gsm8k_analyze.py --run-dir /tmp/lf_x87 --out /tmp/lf_check/x87_gsm8k_posthoc.json
+python code/x87_analyze.py       --out /tmp/lf_check/x87_external_safety_utility.json
+python code/x87_gsm8k_analyze.py --out /tmp/lf_check/x87_gsm8k_posthoc.json
 ```
 
-On this layout both scripts reproduce all 13 released x87 comparisons
-exactly and add the 7 x89 conditions.
+Both reproduce every released x87 comparison exactly.
 
 What to expect when diffing against the released files:
 
@@ -298,7 +292,6 @@ These analyses **cannot** be re-run from released data alone:
 |---|---|
 | `x85_analyze.py`, `x85_aggregate_levels.py` | Need the x85 hidden-state shards (regenerable on GPU, below). |
 | `x86_analyze.py` | Needs the x86 generations, which it hash-checks against the judgments (regenerable on GPU). |
-| `x80_label_audit.py` | Needs `data/pools/cp_15k_clustered_v2.json` (not released). |
 | `mining/s2_auc.py`, `s3_combined_pool.py`, `s4`-`s6` | Need `data/pools/pool.parquet` (regenerable with `s1`). |
 | `mining/s10`-`s12` | Need the per-round filtering parquets (`round_A_rand_{2,3,4}.parquet`), which are not released. |
 
@@ -466,8 +459,7 @@ are still missing or failed.
 
 | Missing artifact | Size | Needed by | How to regenerate |
 |---|---|---|---|
-| Feature caches `$SWSE_FC/{tag}_A15k_v2(style)_full` and the overlays `{tag}_A15k_{v4,v5}_full` | ~46 GB for nine models | path A: `x71_prepare_dataset.py` in the x87 and x88 stage 0, and `x80_fit_paired_probes.py` | `code/extract_features_v2.py`, then `code/x66_build_v4v5_overlays.py` ([commands](#stage-2-feature-caches-labels-overlays-and-the-frozen-split-x66)). **Both need `cp_15k_clustered_v2.json`; see the next row.** |
-| `data/pools/cp_15k_clustered_v2.json`, the 15,000-row harmful source pool with per-row `llm_clustering` records | 139 MB | `extract_features_v2.py` (hard-fails on rows without a valid `llm_clustering`), `x66_build_v4v5_overlays.py`, `x71_prepare_dataset.py --clustered-order`, `x80_label_audit.py`, and the x81 loader (`x81_common.load_cluster_row_ids`, used by `x81_audit`, `x81_build_lexicon`, `x83_build_cohort`) | **Cannot be regenerated from released material.** It is the output of an LLM-clustering labelling step from the parent project, which is not part of this release. What *is* recoverable: prompt text and ids are in `data/datasets/swse_x61_majority_harmful_v1/{prompts,excluded}.jsonl`, and the file's row order is ascending `source_id` (each record's `source_row` gives its row). That suffices for scripts that only need the id order (`x66_build_v4v5_overlays`, `x71_prepare_dataset`, the x81 loader), but not for `extract_features_v2.py`, which validates the clustering records. The authors have not tested a stand-in file. The frozen cohorts that depend on it (`x81_*`, `x83_cohort.json`) are released, so x83-x89 can run from those. |
+| Feature caches `$SWSE_FC/{tag}_A15k_v2(style)_full` and the overlays `{tag}_A15k_{v4,v5}_full` | ~46 GB for nine models | path A: `x71_prepare_dataset.py` in the x87 and x88 stage 0, and `x80_fit_paired_probes.py` | `code/extract_features_v2.py`, then `code/x66_build_v4v5_overlays.py` ([commands](#stage-2-feature-caches-labels-overlays-and-the-frozen-split-x66)). Both read `data/pools/cp_15k_clustered_v2.json` (on Hugging Face). |
 | `data/pools/pool.parquet`, the raw mined candidate pool | 100 MB | `mining/s2`-`s6` | `python code/mining/s1_download_extract.py` (downloads the public source corpora). The source dataset revisions are not pinned, so the rebuilt pool may differ from the original. |
 | `data/pools/round_A_rand_{2,3,4}.parquet` and other per-round filtering outputs | n/a | `mining/s10`-`s12` | Written by `mining/s6_iterative_random_final.py` from `pool.parquet`. An exact match is not guaranteed if `pool.parquet` differs. |
 | Clustered staging batches (`cp_clustered.json`, `cp_rest_clustered.json`, `cp_a2_clustered.json`, `cp_a3_clustered.json`) | n/a | `mining/t13`, `t15` | Not included. They came from the same external labelling step. |
@@ -584,7 +576,7 @@ python code/x66_split_cache_masked.py --src "$SWSE_FC/qwen_A15k_v4_full" \
 #    data/runs/x66/{tag}_seed42_{train,test}_indices.json files are these indices.
 ```
 
-- *Inputs:* `cp_15k_clustered_v2.json` (not released; see above),
+- *Inputs:* `cp_15k_clustered_v2.json` (the harmful source pool; on Hugging Face),
   `cp_15k_benign.json`, and `data/labels/{tag}_labels_{v4,v5}.json`.
 - *Outputs:* `$SWSE_FC/<cache>/{hidden_states.pt, tbg_logits.npy, prompts.json, *_labels_tbg.npy}`
   and the overlay directories.
@@ -603,7 +595,6 @@ cite `x80_*` numbers as evidence for the paper's claims.
 
 ```bash
 python code/x80_label_audit.py        # CPU; writes data/runs/x80/x80_label_manifest.json, data/results/x80_label_audit.json
-                                      # (needs cp_15k_clustered_v2.json)
 python code/x80_fit_paired_probes.py --cache "$SWSE_FC/qwen_A15k_v4_full/hidden_states.pt" \
     --labels data/runs/x80/x80_labels.npz --indices-dir data/runs/x66 \
     --seed 42 --out-dir data/runs/x80/probes --n-perm 5 --n-boot 50 [--l2-ext]
@@ -641,7 +632,7 @@ python code/x81_analyze_de.py                        # -> data/results/x81_de_se
 
 - *Inputs:* `data/prompts/x63_prompts13527.json`, `data/labels/qwen_labels_v4.json`,
   `data/judged/x64_refusal2_qwen_s42.jsonl`, and `data/runs/x66/qwen_seed42_*`.
-  Stages 0-1 also need `cp_15k_clustered_v2.json`. From stage 2 on,
+  Stages 0-1 also read `cp_15k_clustered_v2.json`. From stage 2 on,
   everything runs from released frozen artifacts.
 - *Compute:* about 14-18 GPU-minutes per generation arm (108 prompts × 10
   responses, one B200), and a few cents of judge spend per arm.
@@ -808,10 +799,10 @@ python code/x87_analyze.py          # -> data/results/x87_external_safety_utilit
 python code/x87_gsm8k_analyze.py    # -> data/results/x87_gsm8k_posthoc.json (claimable: false)
 ```
 
-`x87_analyze.py` analyzes the dose extension only when artifacts for
-**every** condition in `EXTENSION_CONDITIONS` exist, and that list now
-includes the x89 conditions. After running x89, use the
-[aliasing workaround](#level-2-re-run-the-analyses-from-the-released-per-run-artifacts-hf-data-cpu-only).
+`x87_analyze.py` analyzes the post-hoc dose extension only when artifacts
+for **every** condition in `EXTENSION_CONDITIONS` exist. That list includes
+the seven x89 conditions, whose artifacts it reads from `data/runs/x89/`
+(see [x89](#x89-positive-dose-and-shallow-scale-extension-descriptive)).
 
 - *Inputs:* `data/runs/x86/x86_directions.npz`, `x86_kl_calibration.json`,
   and the stage-0 adapter (defaults of `--x86-directions`,
@@ -987,12 +978,10 @@ For example: `sbatch --time=04:00:00 --export=ALL,STAGE=extract --array=0-23 cod
 
 ## Citation
 
-The author list is to be confirmed.
-
 ```bibtex
 @inproceedings{lexicalfear2026,
   title     = {Language Models ``Fear'' Harmful Words: Causally Reducing a Lexically Triggered Driver of Over-Refusal},
-  author    = {TBD},
+  author    = {Zhang, Boyuan and Yigit, Ata Dundar and Zandsalimy, Mohammad and Sushmita, Shanu},
   booktitle = {NeurIPS 2026 Workshop on Foundations of Language Model Security},
   year      = {2026},
   note      = {Code and data: https://github.com/zboyr/lexical-fear, https://huggingface.co/datasets/vhboyr/lexical-fear}
@@ -1001,7 +990,9 @@ The author list is to be confirmed.
 
 ## License
 
-License: TBD.
+- **Code** (`code/`): MIT License; see [`LICENSE`](LICENSE).
+- **Data** (`data/`, here and on Hugging Face): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/),
+  for non-commercial research use, subject to the content warning above.
 
 The data includes prompts derived from third-party datasets (WildJailbreak,
 OR-Bench, FalseReject, PHTest, CoCoNot, XSTest, JailbreakBench, ToxicChat,
